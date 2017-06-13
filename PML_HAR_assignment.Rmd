@@ -1,0 +1,95 @@
+---
+title: "Human Activity Recognition: A predictive model"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summary
+
+The aim of this study is to generate a model for the successful prediction of the type of exercise a subject is undertaking based on measurements of their activity. The dataset used is described at the following web page:
+
+[HAR](http://groupware.les.inf.puc-rio.br/har)
+
+The data files are downliaded from the following links:
+
+[training data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)
+[test data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+We use the training dataset to train several kinds of models for prediction of the classe variable and then test each model on the test dataset to assess which model performs the most reliable prediction.
+
+## Data loading and preparation
+
+We begin by downloading and loading the training and test datasets before taking a look at the data structure (shown in the appendix).
+
+
+```{r loaddata}
+library(caret);library(randomForest);library(e1071)
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", "pml-training.csv", "wget", quiet = FALSE, mode = "w",cacheOK = TRUE)
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", "pml-testing.csv", "wget", quiet = FALSE, mode = "w",cacheOK = TRUE)
+traindata<-read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+testdata<-read.csv("pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+```
+
+Before constructing a predictive model we first remove features containing NA values, as well as the first seven columns of the dataset, which contain meta information, rather than features which may be included in the model. We then suset the training data into a dataset to train the model on, and a cross-validation set.
+
+
+```{r cleandata}
+traindata<-traindata[,colSums(is.na(traindata))==0]
+testdata<-testdata[,colSums(is.na(testdata))==0]
+traindata <- traindata[,-c(1:7)]
+testdata <-testdata[,-c(1:7)]
+set.seed(433)
+trainindices <- createDataPartition(y=traindata$classe,p=.70,list=F)
+trainTN <- traindata[trainindices,]
+trainCV <- traindata[-trainindices,]
+```
+
+On plotting a bar plot for the output *classe* factor variable, we see that each kind of activity A-E has similar occurrence distribution in each of the whole training set, the subset actually used for training, and the cross-validation set.
+```{r bplot}
+par(mfrow=c(1,3))
+barplot(table(traindata$classe),main="Occurrence of each classe\nin tbe whole training set",xlab="classe value",ylab="Frequency",col="grey")
+barplot(table(trainTN$classe),main="Occurrence of each classe\nin tbe training sub-dataset",xlab="classe value",ylab="Frequency",col="red")
+barplot(table(trainCV$classe),main="Occurrence of each classe\nin tbe Cross-Validation set",xlab="classe value",ylab="Frequency",col="blue")
+```
+
+## Model fitting: Random Forest
+
+We first of all fit a random forest model and test it's predictive power.
+
+```{r fitrandforest}
+randformod <- randomForest(classe ~. , data=trainTN, method="class")
+randformod
+predictCV<-predict(randformod, trainCV, type ="class")
+confusionMatrix(predictCV,trainCV$classe)
+```
+
+The confusion matrix shows that the predictive accuracy of the random forest model is >99%. With such a high predictive accuracy it is considered a satisfactory predictor.
+
+The error rate for each class of output in the model is shown graphically below. We see that the prediction error for each output class A-E (and Out of Bounds (OOB)) is very small. The error rate in predicting outputs with classe "A" is particularly low.
+
+```{r modelplot}
+plot(randformod, main="Error rates for each output class\nfrom random forest model",log="y")
+legend("topright", colnames(randformod$err.rate),col=1:5,cex=0.8,fill=1:4)
+
+```
+
+The model is now applied to the test dataset and gives the following predictions for the test data: 
+
+```{r applytotestdata}
+predicttest <- predict(randformod, testdata, type="class")
+predicttest
+```
+
+```{r bptestpred}
+barplot(table(predicttest))
+```
+
+## Appendix
+The feature variable names and data structure are as follows:
+```{r appendix}
+names(traindata)
+str(traindata)
+```
